@@ -1,69 +1,71 @@
 var mongoose = require('mongoose'),
-	should = require('should'),
-	config = require('./config'),
-	Schema = mongoose.Schema,
-	ObjectId = Schema.ObjectId,
-	async = require('async'),
-	mongoosastic = require('../lib/mongoosastic');
+  async = require('async'),
+  config = require('./config'),
+  Schema = mongoose.Schema,
+  Book,
+  mongoosastic = require('../lib/mongoosastic');
 
 var BookSchema = new Schema({
-	title: String
-});
-BookSchema.plugin(mongoosastic, {
-	bulk: {
-		size: 10,
-		delay: 100
-	}
+  title: String
 });
 
-var Book = mongoose.model('Book2', BookSchema);
+
+BookSchema.plugin(mongoosastic, {
+  bulk: {
+    size: 100,
+    delay: 1000
+  }
+});
+
+Book = mongoose.model('Book2', BookSchema);
 
 describe('Bulk mode', function() {
-	var books = null;
 
-	before(function(done) {
-		config.deleteIndexIfExists(['book2s'], function() {
-			mongoose.connect(config.mongoUrl, function() {
-				var client = mongoose.connections[0].db;
-				client.collection('book2s', function(err, _books) {
-					books = _books;
-					Book.remove(done);
-				});
-			});
-		});
-	});
-	before(function(done) {
-		async.forEach(bookTitles(), function(title, cb) {
-			new Book({
-				title: title
-			}).save(cb);
-		}, done)
-	});
-	before(function(done) {
-			Book.findOne({
-				title: 'American Gods'
-			}, function(err, book) {
-				book.remove(done)
-			});
-		});
-	it('should index all objects and support deletions too', function(done) {
+  before(function(done) {
+    config.deleteIndexIfExists(['book2s'], function() {
+      mongoose.connect(config.mongoUrl, function() {
+        var client = mongoose.connections[0].db;
+        client.collection('book2s', function() {
+          Book.remove(done);
+        });
+      });
+    });
+  });
+
+  before(function(done) {
+    async.forEach(config.bookTitlesArray(), function(title, cb) {
+      new Book({
+        title: title
+      }).save(cb);
+    }, done);
+  });
+
+  before(function(done) {
+    Book.findOne({
+      title: 'American Gods'
+    }, function(err, book) {
+      book.remove(done);
+    });
+  });
+
+  after(function(done) {
+    mongoose.disconnect();
+    Book.esClient.close();
+    done();
+
+  });
+
+  it('should index all objects and support deletions too', function(done) {
+
+    // This timeout is important, as Elasticsearch is "near-realtime" and the index/deletion takes time that
+    // needs to be taken into account in these tests
     setTimeout(function() {
-      Book.search({match_all: {}}, function(err, results) {
+      Book.search({
+        match_all: {}
+      }, function(err, results) {
         results.should.have.property('hits').with.property('total', 52);
         done();
       });
-    }, 3000)
-	});
+    }, config.BULK_ACTION_TIMEOUT);
+  });
 });
-
-function bookTitles() {
-	var books = [
-		'American Gods',
-		'Gods of the Old World',
-		'American Gothic'
-	];
-	for (var i = 0; i < 50; i++) {
-		books.push('ABABABA' + i);
-	}
-	return books;
-}

@@ -1,67 +1,71 @@
-var mongoose  = require('mongoose')
-  , should    = require('should')
-  , config    = require('./config')
-  , Schema    = mongoose.Schema
-  , ObjectId  = Schema.ObjectId
-  , async     = require('async')
-  , mongoosastic = require('../lib/mongoosastic');
+var mongoose = require('mongoose'),
+  async = require('async'),
+  config = require('./config'),
+  mongoosastic = require('../lib/mongoosastic'),
+  Book,
+  Schema = mongoose.Schema;
 
 var BookSchema = new Schema({
   title: String
 });
+
 BookSchema.plugin(mongoosastic);
 
-var Book = mongoose.model('Book', BookSchema);
+Book = mongoose.model('Book', BookSchema);
 
-describe('Synchronize', function(){
+describe('Synchronize', function() {
   var books = null;
 
-  before(function(done){
-    config.deleteIndexIfExists(['books'], function(){
-      mongoose.connect(config.mongoUrl, function(){
+  before(function(done) {
+    config.deleteIndexIfExists(['books'], function() {
+      mongoose.connect(config.mongoUrl, function() {
         var client = mongoose.connections[0].db;
-        client.collection('books', function(err, _books){
+        client.collection('books', function(err, _books) {
           books = _books;
           Book.remove(done);
         });
       });
     });
   });
-  describe('existing collection', function(){
-    before(function(done){
-      async.forEach(bookTitles()
-          , function(title, cb){
-        books.insert({title:title}, cb);
+
+  after(function(done) {
+    Book.esClient.close();
+    mongoose.disconnect();
+    done();
+  });
+
+  describe('existing collection', function() {
+
+    before(function(done) {
+      async.forEach(config.bookTitlesArray(), function(title, cb) {
+        books.insert({
+          title: title
+        }, cb);
       }, done);
     });
-    it('should index all existing objects', function(done){
-      var stream = Book.synchronize()
-        , count = 0;
 
-      stream.on('data', function(err, doc){
+    it('should index all existing objects', function(done) {
+      var stream = Book.synchronize(),
+        count = 0;
+
+      stream.on('data', function() {
         count++;
       });
 
-      stream.on('close', function(){
+      stream.on('close', function() {
         count.should.eql(53);
-        setTimeout(function(){
-          Book.search({query_string: {query: 'American'}}, function(err, results){
+        setTimeout(function() {
+          Book.search({
+            query_string: {
+              query: 'American'
+            }
+          }, function(err, results) {
             results.hits.total.should.eql(2);
             done();
           });
-        }, config.indexingTimeout);
+        }, config.INDEXING_TIMEOUT);
       });
     });
+
   });
 });
-function bookTitles(){
-  var books = [
-    'American Gods',
-    'Gods of the Old World',
-    'American Gothic'
-  ];
-  for(var i = 0; i < 50; i++){
-    books.push('ABABABA'+i);
-  }
-  return books;
-}

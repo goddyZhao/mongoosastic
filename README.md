@@ -1,29 +1,36 @@
 # Mongoosastic
-[![Build
-Status](https://secure.travis-ci.org/mongoosastic/mongoosastic.png?branch=master)](http://travis-ci.org/mongoosastic/mongoosastic)
-[![NPM version](https://badge.fury.io/js/mongoosastic.svg)](http://badge.fury.io/js/mongoosastic)
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/mongoosastic/mongoosastic?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](https://secure.travis-ci.org/mongoosastic/mongoosastic.png?branch=master)](http://travis-ci.org/mongoosastic/mongoosastic)
+[![NPM version](https://img.shields.io/npm/v/mongoosastic.svg)](https://www.npmjs.com/package/mongoosastic)
+[![Coverage Status](https://coveralls.io/repos/mongoosastic/mongoosastic/badge.svg?branch=master&service=github)](https://coveralls.io/github/mongoosastic/mongoosastic?branch=master)
+[![Downloads](https://img.shields.io/npm/dm/mongoosastic.svg)](https://www.npmjs.com/package/mongoosastic)
+[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/mongoosastic/mongoosastic?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
+[![NPM](https://nodei.co/npm/mongoosastic.png)](https://nodei.co/npm/mongoosastic/)
 
 Mongoosastic is a [mongoose](http://mongoosejs.com/) plugin that can automatically index your models into [elasticsearch](http://www.elasticsearch.org/).
 
 - [Installation](#installation)
 - [Setup](#setup)
 - [Indexing](#indexing)
-	- [Saving a document](#saving-a-document)
-	- [Indexing nested models](#indexing-nested-models)
-	- [Indexing an existing collection](#indexing-an-existing-collection)
-	- [Bulk indexing](#bulk-indexing)
-	- [Indexing on demand](#indexing-on-demand)
-	- [Truncating an index](#truncating-an-index)
+  - [Saving a document](#saving-a-document)
+  - [Indexing nested models](#indexing-nested-models)
+  - [Indexing mongoose references](#indexing-mongoose-references)
+  - [Indexing an existing collection](#indexing-an-existing-collection)
+  - [Bulk indexing](#bulk-indexing)
+  - [Filtered indexing](#filtered-indexing)
+  - [Indexing on demand](#indexing-on-demand)
+  - [Truncating an index](#truncating-an-index)
 - [Mapping](#mapping)
-	- [Geo mapping](#geo-mapping)
-		- [Indexing a geo point](#indexing-a-geo-point)
-		- [Indexing a geo shape](#indexing-a-geo-shape)
-	- [Creating mappings on-demand](#creating-mappings-on-demand)
+  - [Geo mapping](#geo-mapping)
+    - [Indexing a geo point](#indexing-a-geo-point)
+    - [Indexing a geo shape](#indexing-a-geo-shape)
+  - [Creating mappings on-demand](#creating-mappings-on-demand)
 - [Queries](#queries)
-	- [Hydration](#hydration)
+  - [Hydration](#hydration)
 
 ## Installation
+
+The latest version of this package will be as close as possible to the latest `elasticsearch` and `mongoose` packages. 
 
 ```bash
 npm install -S mongoosastic
@@ -35,20 +42,24 @@ npm install -S mongoosastic
 
 Options are:
 
-* `index` - the index in elastic search to use. Defaults to the
-  pluralization of the model name.
-* `type`  - the type this model represents in elastic search. Defaults
-  to the model name.
-* `host` - the host elastic search is running on
-* `port` - the port elastic search is running on
-* `auth` - the authentication needed to reach elastic search server. In the standard format of 'username:password'
-* `protocol` - the protocol the elastic search server uses. Defaults to http
+* `index` - the index in Elasticsearch to use. Defaults to the pluralization of the model name.
+* `type`  - the type this model represents in Elasticsearch. Defaults to the model name.
+* `esClient` - an existing Elasticsearch `Client` instance.
+* `hosts` - an array hosts Elasticsearch is running on.
+* `host` - the host Elasticsearch is running on
+* `port` - the port Elasticsearch is running on
+* `auth` - the authentication needed to reach Elasticsearch server. In the standard format of 'username:password'
+* `protocol` - the protocol the Elasticsearch server uses. Defaults to http
 * `hydrate` - whether or not to lookup results in mongodb before
 * `hydrateOptions` - options to pass into hydrate function
 * `bulk` - size and delay options for bulk indexing
+* `filter` - the function used for filtered indexing
+* `transform` - the function used to transform serialized document before indexing
+* `populate` - an Array of Mongoose populate options objects
+* `indexAutomatically` - allows indexing after model save to be disabled for when you need finer control over when documents are indexed. Defaults to true
 
 
-To have a model indexed into elastic search simply add the plugin.
+To have a model indexed into Elasticsearch simply add the plugin.
 
 ```javascript
 var mongoose     = require('mongoose')
@@ -67,12 +78,12 @@ User.plugin(mongoosastic)
 This will by default simply use the pluralization of the model name as the index 
 while using the model name itself as the type. So if you create a new
 User object and save it, you can see it by navigating to
-http://localhost:9200/users/user/_search (this assumes elasticsearch is
+http://localhost:9200/users/user/_search (this assumes Elasticsearch is
 running locally on port 9200). 
 
-The default behavior is all fields get indexed into elasticsearch. This can be a little wasteful especially considering that
+The default behavior is all fields get indexed into Elasticsearch. This can be a little wasteful especially considering that
 the document is now just being duplicated between mongodb and
-elasticsearch so you should consider opting to index only certain fields by specifying ''es_indexed'' on the 
+Elasticsearch so you should consider opting to index only certain fields by specifying `es_indexed` on the 
 fields you want to store:
 
 
@@ -86,12 +97,11 @@ var User = new Schema({
 User.plugin(mongoosastic)
 ```
 
-In this case only the name field
-will be indexed for searching.
+In this case only the name field will be indexed for searching.
 
 Now, by adding the plugin, the model will have a new method called
 `search` which can be used to make simple to complex searches. The `search`
-method accepts [standard elasticsearch query DSL](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-queries.html)
+method accepts [standard Elasticsearch query DSL](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-queries.html)
 
 ```javascript
 User.search({
@@ -103,6 +113,27 @@ User.search({
 });
 
 ```
+
+To connect to more than one host, you can use an array of hosts. 
+
+```javascript
+MyModel.plugin(mongoosastic, {
+  hosts: [
+    'localhost:9200',
+    'anotherhost:9200'
+  ]
+})
+```
+
+Also, you can re-use an existing Elasticsearch `Client` instance
+
+```javascript
+var esClient = new elasticsearch.Client({host: 'localhost:9200'});
+MyModel.plugin(mongoosastic, {
+  esClient: esClient
+})
+```
+
 
 ## Indexing
 
@@ -143,11 +174,71 @@ var User = new Schema({
 User.plugin(mongoosastic)
 ```
 
+###Elasticsearch [Nested datatype](https://www.elastic.co/guide/en/elasticsearch/reference/2.0/nested.html)
+Since the default in Elasticsearch is to take arrays and flatten them into objects,
+it can make it hard to write queries where you need to maintain the relationships 
+between objects in the array, per .
+The way to change this behavior is by changing the Elasticsearch type from `object` 
+(the mongoosastic default) to `nested`
+
+```javascript
+var Comment = new Schema({
+    title: String
+  , body: String
+  , author: String
+})
+
+
+var User = new Schema({
+    name: {type: String, es_indexed: true}
+  , email: String
+  , city: String
+  , comments: {
+      type:[Comment], 
+      es_indexed: true, 
+      es_type: 'nested', 
+      es_include_in_parent: true
+  }
+})
+
+User.plugin(mongoosastic)
+```
+
+###Indexing Mongoose References
+In order to index mongoose references you can refer following example.
+
+```javascript
+var Comment = new Schema({
+    title: String
+  , body: String
+  , author: String
+});
+
+
+var User = new Schema({
+    name: {type:String, es_indexed:true}
+  , email: String
+  , city: String
+  , comments: {type: Schema.Types.ObjectId, ref: 'Comment',
+    es_schema: Comment, es_indexed:true, es_select: 'title body'}
+})
+
+User.plugin(mongoosastic, {
+  populate: [
+    {path: 'comments', select: 'title body'}
+  ]
+})
+```
+In the schema you'll need to provide `es_schema` field - the referenced schema.
+By default every field of the referenced schema will be mapped. Use `es_select` field to pick just specific fields.
+
+`populate` is an array of options objects you normally pass to
+[Model.populate](http://mongoosejs.com/docs/api.html#model_Model.populate).
 
 ### Indexing An Existing Collection
 Already have a mongodb collection that you'd like to index using this
 plugin? No problem! Simply call the synchronize method on your model to
-open a mongoose stream and start indexing documents individually. 
+open a mongoose stream and start indexing documents individually.
 
 ```javascript
 var BookSchema = new Schema({
@@ -178,7 +269,7 @@ var stream = Book.synchronize({author: 'Arthur C. Clarke'})
 
 ### Bulk Indexing
 
-You can also specify `bulk` options with mongoose which will utilize elasticsearch's bulk indexing api. This will cause the `synchronize` function to use bulk indexing as well. 
+You can also specify `bulk` options with mongoose which will utilize Elasticsearch's bulk indexing api. This will cause the `synchronize` function to use bulk indexing as well. 
 
 Mongoosastic will wait 1 second (or specified delay) until it has 1000 docs (or specified size) and then perform bulk indexing.
 
@@ -191,11 +282,33 @@ BookSchema.plugin(mongoosastic, {
 });
 ```
 
+### Filtered Indexing
+
+You can specify a filter function to index a model to Elasticsearch based on some specific conditions.
+
+Filtering function must return True for conditions that will ignore indexing to Elasticsearch.
+
+```javascript
+var MovieSchema = new Schema({
+  title: {type: String},
+  genre: {type: String, enum: ['horror', 'action', 'adventure', 'other']}
+});
+
+MovieSchema.plugin(mongoosastic, {
+  filter: function(doc) {
+    return doc.genre === 'action';
+  }
+});
+```
+
+Instances of Movie model having 'action' as their genre will not be indexed to Elasticsearch.
+
+
 ### Indexing On Demand
 You can do on-demand indexes using the `index` function
 
 ```javascript
-Dude.findOne({name:'Jeffery Lebowski', function(err, dude){
+Dude.findOne({name:'Jeffrey Lebowski', function(err, dude){
   dude.awesome = true;
   dude.index(function(err, res){
     console.log("egads! I've been indexed!");
@@ -215,7 +328,7 @@ mongodb. Use save for that.
 
 ### Truncating an index
 
-The static method `esTruncate` will delete all documents from the associated index. This method combined with synchronise can be usefull in case of integration tests for example when each test case needs a cleaned up index in ElasticSearch.
+The static method `esTruncate` will delete all documents from the associated index. This method combined with synchronise can be usefull in case of integration tests for example when each test case needs a cleaned up index in Elasticsearch.
 
 ```javascript
 GarbageModel.esTruncate(function(err){...});
@@ -224,7 +337,7 @@ GarbageModel.esTruncate(function(err){...});
 ## Mapping
 
 Schemas can be configured to have special options per field. These match
-with the existing [field mapping configurations](http://www.elasticsearch.org/guide/reference/mapping/core-types.html) defined by elasticsearch with the only difference being they are all prefixed by "es_". 
+with the existing [field mapping configurations](http://www.elasticsearch.org/guide/reference/mapping/core-types.html) defined by Elasticsearch with the only difference being they are all prefixed by "es_". 
 
 So for example. If you wanted to index a book model and have the boost
 for title set to 2.0 (giving it greater priority when searching) you'd
@@ -242,7 +355,7 @@ This example uses a few other mapping fields... such as null_value and
 type (which overrides whatever value the schema type is, useful if you
 want stronger typing such as float).
 
-There are various mapping options that can be defined in elasticsearch. Check out [http://www.elasticsearch.org/guide/reference/mapping/](http://www.elasticsearch.org/guide/reference/mapping/) for more information. Here are examples to the currently possible definitions in mongoosastic:
+There are various mapping options that can be defined in Elasticsearch. Check out [http://www.elasticsearch.org/guide/reference/mapping/](http://www.elasticsearch.org/guide/reference/mapping/) for more information. Here are examples to the currently possible definitions in mongoosastic:
 
 ```javascript
 var ExampleSchema = new Schema({
@@ -364,7 +477,7 @@ var geoQuery = {
 
 var geoFilter = {
       geo_shape: {
-        geo_shape": {
+        geo_shape: {
           shape: {
             type: "point", 
             coordinates: [3,1]
@@ -410,7 +523,7 @@ populated in the `err` argument.
 
 
 ## Queries
-The full query DSL of elasticsearch is exposed through the search
+The full query DSL of Elasticsearch is exposed through the search
 method. For example, if you wanted to find all people between ages 21
 and 30:
 
@@ -427,7 +540,7 @@ Person.search({
 });
 
 ```
-See the elasticsearch [Query DSL](http://www.elasticsearch.org/guide/reference/query-dsl/) docs for more information.
+See the Elasticsearch [Query DSL](http://www.elasticsearch.org/guide/reference/query-dsl/) docs for more information.
 
 You can also specify query options like [sorts](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html#search-request-sort)
 
@@ -437,12 +550,28 @@ Person.search({/* ... */}, {sort: "age:asc"}, function(err, people){
 });
 ```
 
+And also [aggregations](https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html):
+
+```javascript
+Person.search({/* ... */}, {
+  aggs: {
+    'names': {
+      'terms': {
+        'field': 'name'
+      }
+    }
+  }
+}, function(err, results){
+  // results.aggregations holds the aggregations
+});
+```
+
 Options for queries must adhere to the [javascript elasticsearch driver specs](http://www.elasticsearch.org/guide/en/elasticsearch/client/javascript-api/current/api-reference.html#api-search).
 
 
 ### Hydration
 By default objects returned from performing a search will be the objects
-as is in elastic search. This is useful in cases where only what was
+as is in Elasticsearch. This is useful in cases where only what was
 indexed needs to be displayed (think a list of results) while the actual
 mongoose object contains the full data when viewing one of the results.
 
@@ -468,7 +597,7 @@ User.search({query_string: {query: "john"}}, {hydrate:true, hydrateOptions: {sel
 
 ```
 
-Note using hydrate will be a degree slower as it will perform an elasticsearch
+Note using hydrate will be a degree slower as it will perform an Elasticsearch
 query and then do a query against mongodb for all the ids returned from
 the search result. 
 
