@@ -1,7 +1,3 @@
-'use strict';
-
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol ? "symbol" : typeof obj; };
-
 //
 // Get type from the mongoose schema
 //
@@ -40,12 +36,10 @@ function getTypeFromPaths(paths, field) {
 //
 function getMapping(cleanTree, inPrefix) {
   var mapping = {},
-      value,
-      field,
-      prop,
-      implicitFields = [],
-      hasEsIndex = false,
-      prefix = inPrefix !== '' ? inPrefix + '.' : inPrefix;
+    value, field, prop,
+    implicitFields = [],
+    hasEsIndex = false,
+    prefix = inPrefix !== '' ? `${inPrefix}.` : inPrefix;
 
   for (field in cleanTree) {
     if (!cleanTree.hasOwnProperty(field)) {
@@ -63,7 +57,7 @@ function getMapping(cleanTree, inPrefix) {
     }
 
     // If there is no type, then it's an object with subfields.
-    if ((typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object' && !value.type) {
+    if (typeof value === 'object' && !value.type) {
       mapping[field].type = 'object';
       mapping[field].properties = getMapping(value, prefix + field);
     }
@@ -101,7 +95,7 @@ function getMapping(cleanTree, inPrefix) {
 
   // If one of the fields was explicitly indexed, delete all implicit fields
   if (hasEsIndex) {
-    implicitFields.forEach(function (implicitField) {
+    implicitFields.forEach(implicitField => {
       delete mapping[implicitField];
     });
   }
@@ -122,15 +116,15 @@ function getMapping(cleanTree, inPrefix) {
 function getCleanTree(tree, paths, inPrefix) {
 
   var cleanTree = {},
-      type = '',
-      value = {},
-      field,
-      prop,
-      treeNode,
-      subTree,
-      key,
-      geoFound = false,
-      prefix = inPrefix !== '' ? inPrefix + '.' : inPrefix;
+    type = '',
+    value = {},
+    field,
+    prop,
+    treeNode,
+    subTree,
+    key,
+    geoFound = false,
+    prefix = inPrefix !== '' ? `${inPrefix}.` : inPrefix;
 
   for (field in tree) {
     if (prefix === '' && (field === 'id' || field === '_id')) {
@@ -151,67 +145,65 @@ function getCleanTree(tree, paths, inPrefix) {
         // A nested array can contain complex objects
         nestedSchema(paths, field, cleanTree, value, prefix); // eslint-disable-line no-use-before-define
       } else if (value.type && Array.isArray(value.type)) {
-          // An object with a nested array
-          nestedSchema(paths, field, cleanTree, value, prefix); // eslint-disable-line no-use-before-define
-          // Merge top level es settings
-          for (prop in value) {
-            // Map to field if it's an Elasticsearch option
-            if (value.hasOwnProperty(prop) && prop.indexOf('es_') === 0 && prop !== 'es_indexed') {
-              cleanTree[field][prop] = value[prop];
-            }
+        // An object with a nested array
+        nestedSchema(paths, field, cleanTree, value, prefix); // eslint-disable-line no-use-before-define
+        // Merge top level es settings
+        for (prop in value) {
+          // Map to field if it's an Elasticsearch option
+          if (value.hasOwnProperty(prop) && prop.indexOf('es_') === 0 && prop !== 'es_indexed') {
+            cleanTree[field][prop] = value[prop];
           }
-        } else if (paths[field] && paths[field].options.es_schema && paths[field].options.es_schema.tree && paths[field].options.es_schema.paths) {
-          subTree = paths[field].options.es_schema.tree;
-          if (paths[field].options.es_select) {
-            for (treeNode in subTree) {
-              if (!subTree.hasOwnProperty(treeNode)) {
-                continue;
-              }
-              if (paths[field].options.es_select.split(' ').indexOf(treeNode) === -1) {
-                delete subTree[treeNode];
-              }
-            }
-          }
-          cleanTree[field] = getCleanTree(subTree, paths[field].options.es_schema.paths, '');
-        } else if (value === String || value === Object || value === Date || value === Number || value === Boolean || value === Array) {
-          cleanTree[field] = {};
-          cleanTree[field].type = type;
-        } else {
-          cleanTree[field] = {};
-          for (key in value) {
-            if (value.hasOwnProperty(key)) {
-              cleanTree[field][key] = value[key];
-            }
-          }
-          cleanTree[field].type = type;
         }
+      } else if (paths[field] && paths[field].options.es_schema && paths[field].options.es_schema.tree && paths[field].options.es_schema.paths) {
+        subTree = paths[field].options.es_schema.tree;
+        if (paths[field].options.es_select) {
+          for (treeNode in subTree) {
+            if (!subTree.hasOwnProperty(treeNode)) { continue; }
+            if (paths[field].options.es_select.split(' ').indexOf(treeNode) === -1) {
+              delete subTree[treeNode];
+            }
+          }
+        }
+        cleanTree[field] = getCleanTree(subTree, paths[field].options.es_schema.paths, '');
+      } else if (value === String || value === Object || value === Date || value === Number || value === Boolean || value === Array) {
+        cleanTree[field] = {};
+        cleanTree[field].type = type;
+      } else {
+        cleanTree[field] = {};
+        for (key in value) {
+          if (value.hasOwnProperty(key)) {
+            cleanTree[field][key] = value[key];
+          }
+        }
+        cleanTree[field].type = type;
+      }
 
       // It has no type for some reason
     } else {
-        // Because it is an geo_* object!!
-        if ((typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object') {
-          for (key in value) {
-            if (value.hasOwnProperty(key) && /^geo_/.test(key)) {
-              cleanTree[field] = value[key];
-              geoFound = true;
-            }
-          }
-
-          if (geoFound) {
-            continue;
+      // Because it is an geo_* object!!
+      if (typeof value === 'object') {
+        for (key in value) {
+          if (value.hasOwnProperty(key) && /^geo_/.test(key)) {
+            cleanTree[field] = value[key];
+            geoFound = true;
           }
         }
 
-        // If it's a virtual type, don't map it
-        if ((typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object' && value.getters && value.setters && value.options) {
+        if (geoFound) {
           continue;
         }
-
-        // Because it is some other object!! Or we assumed that it is one.
-        if ((typeof value === 'undefined' ? 'undefined' : _typeof(value)) === 'object') {
-          cleanTree[field] = getCleanTree(value, paths, prefix + field);
-        }
       }
+
+      // If it's a virtual type, don't map it
+      if (typeof value === 'object' && value.getters && value.setters && value.options) {
+        continue;
+      }
+
+      // Because it is some other object!! Or we assumed that it is one.
+      if (typeof value === 'object') {
+        cleanTree[field] = getCleanTree(value, paths, prefix + field);
+      }
+    }
   }
 
   return cleanTree;
@@ -233,7 +225,7 @@ function nestedSchema(paths, field, cleanTree, value, prefix) {
     cleanTree[field] = getCleanTree(paths[prefix + field].schema.tree, paths[prefix + field].schema.paths, '');
   } else if (paths[prefix + field] && paths[prefix + field].caster && paths[prefix + field].caster.instance) {
     // Even for simple types the value can be an object if there is other attributes than type
-    if (_typeof(value[0]) === 'object') {
+    if (typeof value[0] === 'object') {
       cleanTree[field] = value[0];
     } else {
       cleanTree[field] = {};
@@ -257,7 +249,7 @@ function Generator() {}
 
 Generator.prototype.generateMapping = function generateMapping(schema, cb) {
   var cleanTree = getCleanTree(schema.tree, schema.paths, ''),
-      mapping;
+    mapping;
   delete cleanTree[schema.get('versionKey')];
   mapping = getMapping(cleanTree, '');
   cb(null, {

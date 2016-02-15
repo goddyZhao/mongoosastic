@@ -1,26 +1,22 @@
-'use strict';
-
 var elasticsearch = require('elasticsearch'),
-    Generator = require('./mapping-generator'),
-    generator = new Generator(),
-    serialize = require('./serialize'),
-    events = require('events'),
-    util = require('util'),
-    nop = function nop() {};
+  Generator = require('./mapping-generator'),
+  generator = new Generator(),
+  serialize = require('./serialize'),
+  events = require('events'),
+  util = require('util'),
+  nop = function nop() {};
 
 function isString(subject) {
   return typeof subject === 'string';
 }
 
 function isStringArray(arr) {
-  return arr.filter && arr.length === arr.filter(function (item) {
-    return typeof item === 'string';
-  }).length;
+  return arr.filter && arr.length === (arr.filter(item => typeof item === 'string')).length;
 }
 
 function getMapping(schema) {
   var retMapping = {};
-  generator.generateMapping(schema, function (err, mapping) {
+  generator.generateMapping(schema, (err, mapping) => {
     retMapping = mapping;
   });
 
@@ -43,32 +39,32 @@ function createEsClient(options) {
     };
   }
 
-  esOptions.log = options ? options.log : null;
+  esOptions.log = (options ? options.log : null);
 
   return new elasticsearch.Client(esOptions);
 }
 
 function createMappingIfNotPresent(options, cb) {
   var client = options.client,
-      indexName = options.indexName,
-      typeName = options.typeName,
-      schema = options.schema,
-      settings = options.settings,
-      properties = options.properties;
+    indexName = options.indexName,
+    typeName = options.typeName,
+    schema = options.schema,
+    settings = options.settings,
+    properties = options.properties;
 
-  generator.generateMapping(schema, function (ignoredErr, mapping) {
+  generator.generateMapping(schema, (ignoredErr, mapping) => {
     var completeMapping = {};
     completeMapping[typeName] = mapping;
 
     if (properties) {
-      Object.keys(properties).map(function (key) {
+      Object.keys(properties).map(key => {
         completeMapping[typeName].properties[key] = properties[key];
       });
     }
 
     client.indices.exists({
       index: indexName
-    }, function (err, exists) {
+    }, (err, exists) => {
       if (err) {
         return cb(err);
       }
@@ -79,11 +75,12 @@ function createMappingIfNotPresent(options, cb) {
           type: typeName,
           body: completeMapping
         }, cb);
+
       }
       return client.indices.create({
         index: indexName,
         body: settings
-      }, function (indexErr) {
+      }, indexErr => {
         if (indexErr) {
           return cb(indexErr);
         }
@@ -100,31 +97,32 @@ function createMappingIfNotPresent(options, cb) {
 
 function hydrate(res, model, options, cb) {
   var results = res.hits,
-      resultsMap = {},
-      ids = results.hits.map(function (result, idx) {
-    resultsMap[result._id] = idx;
-    return result._id;
-  }),
-      query = model.find({
-    _id: {
-      $in: ids
-    }
-  }),
-      hydrateOptions = options.hydrateOptions;
+    resultsMap = {},
+    ids = results.hits.map((result, idx) => {
+      resultsMap[result._id] = idx;
+      return result._id;
+    }),
+
+    query = model.find({
+      _id: {
+        $in: ids
+      }
+    }),
+    hydrateOptions = options.hydrateOptions;
 
   // Build Mongoose query based on hydrate options
   // Example: {lean: true, sort: '-name', select: 'address name'}
-  Object.keys(hydrateOptions).forEach(function (option) {
+  Object.keys(hydrateOptions).forEach(option => {
     query[option](hydrateOptions[option]);
   });
 
-  query.exec(function (err, docs) {
+  query.exec((err, docs) => {
     var hits = [];
     if (err) {
       return cb(err);
     }
 
-    docs.forEach(function (doc) {
+    docs.forEach(doc => {
       var idx = resultsMap[doc._id];
       if (options.highlight) {
         doc._highlight = results.hits[idx].highlight;
@@ -141,18 +139,18 @@ function hydrate(res, model, options, cb) {
 
 function deleteByMongoId(options, cb) {
   var index = options.index,
-      type = options.type,
-      client = options.client,
-      model = options.model,
-      tries = options.tries;
+    type = options.type,
+    client = options.client,
+    model = options.model,
+    tries = options.tries;
 
   client.delete({
     index: index,
     type: type,
     id: model._id.toString()
-  }, function (err, res) {
+  }, (err, res) => {
     if (err && err.message.indexOf('404') > -1) {
-      setTimeout(function () {
+      setTimeout(() => {
         if (tries <= 0) {
           return cb(err);
         }
@@ -169,20 +167,18 @@ function deleteByMongoId(options, cb) {
 function Mongoosastic(schema, pluginOpts) {
   var options = pluginOpts || {};
 
-  var bulkTimeout,
-      bulkBuffer = [],
-      esClient,
-      populate = options && options.populate,
-      mapping = getMapping(schema),
-      indexName = options && options.index,
-      typeName = options && options.type,
-      alwaysHydrate = options && options.hydrate,
-      defaultHydrateOptions = options && options.hydrateOptions,
-      bulk = options && options.bulk,
-      filter = options && options.filter,
-      transform = options && options.transform,
-      customProperties = options && options.customProperties,
-      indexAutomatically = !(options && options.indexAutomatically === false);
+  var bulkTimeout, bulkBuffer = [], esClient,
+    populate = options && options.populate,
+    mapping = getMapping(schema),
+    indexName = options && options.index,
+    typeName = options && options.type,
+    alwaysHydrate = options && options.hydrate,
+    defaultHydrateOptions = options && options.hydrateOptions,
+    bulk = options && options.bulk,
+    filter = options && options.filter,
+    transform = options && options.transform,
+    customProperties = options && options.customProperties,
+    indexAutomatically = !(options && options.indexAutomatically === false);
 
   if (options.esClient) {
     esClient = options.esClient;
@@ -193,7 +189,7 @@ function Mongoosastic(schema, pluginOpts) {
   function setIndexNameIfUnset(model) {
     var modelName = model.toLowerCase();
     if (!indexName) {
-      indexName = modelName + 's';
+      indexName = `${modelName}s`;
     }
 
     if (!typeName) {
@@ -215,14 +211,14 @@ function Mongoosastic(schema, pluginOpts) {
       return;
     }
 
-    if (bulkBuffer.length >= (bulk && bulk.size || 1000)) {
+    if (bulkBuffer.length >= ((bulk && bulk.size) || 1000)) {
       schema.statics.flush();
       clearBulkTimeout();
     } else if (bulkTimeout === undefined) {
-      bulkTimeout = setTimeout(function () {
+      bulkTimeout = setTimeout(() => {
         schema.statics.flush();
         clearBulkTimeout();
-      }, bulk && bulk.delay || 1000);
+      }, (bulk && bulk.delay) || 1000);
     }
   }
 
@@ -248,6 +244,7 @@ function Mongoosastic(schema, pluginOpts) {
     bulkAdd(opts.model);
   }
 
+
   /**
    * ElasticSearch Client
    */
@@ -256,12 +253,13 @@ function Mongoosastic(schema, pluginOpts) {
   /**
    * Create the mapping. Takes an optional settings parameter and a callback that will be called once
    * the mapping is created
-    * @param settings Object (optional)
+
+   * @param settings Object (optional)
    * @param cb Function
    */
   schema.statics.createMapping = function createMapping(inSettings, inCb) {
     var cb = inCb,
-        settings = inSettings;
+      settings = inSettings;
     if (arguments.length < 2) {
       cb = inSettings || nop;
       settings = undefined;
@@ -284,11 +282,9 @@ function Mongoosastic(schema, pluginOpts) {
    * @param cb Function
    */
   schema.methods.index = function schemaIndex(inOpts, inCb) {
-    var index,
-        type,
-        serialModel,
-        cb = inCb,
-        opts = inOpts;
+    var index, type, serialModel,
+      cb = inCb,
+      opts = inOpts;
 
     if (arguments.length < 2) {
       cb = inOpts || nop;
@@ -335,7 +331,7 @@ function Mongoosastic(schema, pluginOpts) {
    */
   schema.methods.unIndex = function unIndex(inOpts, inCb) {
     var opts = inOpts,
-        cb = inCb;
+      cb = inCb;
 
     if (arguments.length < 2) {
       cb = inOpts || nop;
@@ -364,8 +360,8 @@ function Mongoosastic(schema, pluginOpts) {
    */
   schema.statics.esTruncate = function esTruncate(inOpts, inCb) {
     var opts = inOpts,
-        cb = inCb,
-        esQuery;
+      cb = inCb,
+      esQuery;
 
     if (arguments.length < 2) {
       cb = inOpts || nop;
@@ -387,12 +383,12 @@ function Mongoosastic(schema, pluginOpts) {
       type: opts.type
     };
 
-    esClient.search(esQuery, function (err, res) {
+    esClient.search(esQuery, (err, res) => {
       if (err) {
         return cb(err);
       }
       if (res.hits.total) {
-        res.hits.hits.forEach(function (doc) {
+        res.hits.hits.forEach(doc => {
           opts.model = doc;
           bulkDelete(opts, nop);
         });
@@ -408,13 +404,13 @@ function Mongoosastic(schema, pluginOpts) {
    */
   schema.statics.synchronize = function synchronize(inQuery) {
     var em = new events.EventEmitter(),
-        closeValues = [],
-        counter = 0,
-        stream,
-        query = inQuery || {},
-        close = function close() {
-      em.emit.apply(em, ['close'].concat(closeValues));
-    };
+      closeValues = [],
+      counter = 0,
+      stream,
+      query = inQuery || {},
+      close = function close() {
+        em.emit.apply(em, ['close'].concat(closeValues));
+      };
 
     // Set indexing to be bulk when synchronizing to make synchronizing faster
     // Set default values when not present
@@ -427,7 +423,7 @@ function Mongoosastic(schema, pluginOpts) {
 
     stream = this.find(query).batchSize(bulk.batch).stream();
 
-    stream.on('data', function (doc) {
+    stream.on('data', doc => {
       stream.pause();
       counter++;
 
@@ -444,7 +440,7 @@ function Mongoosastic(schema, pluginOpts) {
       doc.on('es-indexed', onIndex);
       doc.on('es-filtered', onIndex);
 
-      doc.save(function (err) {
+      doc.save(err => {
         if (err) {
           em.emit('error', err);
           return stream.resume();
@@ -452,10 +448,10 @@ function Mongoosastic(schema, pluginOpts) {
       });
     });
 
-    stream.on('close', function (pA, pB) {
+    stream.on('close', (pA, pB) => {
       var closeInterval;
       closeValues = [pA, pB];
-      closeInterval = setInterval(function () {
+      closeInterval = setInterval(() => {
         if (counter === 0 && bulkBuffer.length === 0) {
           clearInterval(closeInterval);
           close();
@@ -464,7 +460,7 @@ function Mongoosastic(schema, pluginOpts) {
       }, 1000);
     });
 
-    stream.on('error', function (err) {
+    stream.on('error', err => {
       em.emit('error', err);
     });
 
@@ -480,10 +476,10 @@ function Mongoosastic(schema, pluginOpts) {
    */
   schema.statics.search = function search(inQuery, inOpts, inCb) {
     var _this = this,
-        cb = inCb,
-        opts = inOpts,
-        esQuery,
-        query = inQuery === null ? undefined : inQuery;
+      cb = inCb,
+      opts = inOpts,
+      esQuery,
+      query = inQuery === null ? undefined : inQuery;
 
     if (arguments.length === 2) {
       cb = arguments[1];
@@ -511,7 +507,7 @@ function Mongoosastic(schema, pluginOpts) {
       esQuery.body.aggs = opts.aggs;
     }
 
-    Object.keys(opts).forEach(function (opt) {
+    Object.keys(opts).forEach(opt => {
       if (!opt.match(/(hydrate|sort)/) && opts.hasOwnProperty(opt)) {
         esQuery[opt] = opts[opt];
       }
@@ -522,10 +518,12 @@ function Mongoosastic(schema, pluginOpts) {
         } else {
           esQuery.body.sort = opts.sort;
         }
+
       }
+
     });
 
-    esClient.search(esQuery, function (err, res) {
+    esClient.search(esQuery, (err, res) => {
       if (err) {
         return cb(err);
       }
@@ -540,8 +538,8 @@ function Mongoosastic(schema, pluginOpts) {
 
   schema.statics.esCount = function esCount(inQuery, inCb) {
     var cb = inCb,
-        query = inQuery,
-        esQuery;
+      query = inQuery,
+      esQuery;
 
     setIndexNameIfUnset(this.modelName);
 
@@ -561,6 +559,7 @@ function Mongoosastic(schema, pluginOpts) {
     esClient.count(esQuery, cb);
   };
 
+
   schema.statics.flush = function flush(inCb) {
     var cb = inCb || nop;
 
@@ -573,7 +572,7 @@ function Mongoosastic(schema, pluginOpts) {
 
   schema.statics.refresh = function refresh(inOpts, inCb) {
     var cb = inCb,
-        opts = inOpts;
+      opts = inOpts;
     if (arguments.length < 2) {
       cb = inOpts || nop;
       opts = {};
@@ -584,6 +583,7 @@ function Mongoosastic(schema, pluginOpts) {
       index: opts.index || indexName
     }, cb);
   };
+
 
   function postRemove(doc) {
     var opts = {
@@ -614,10 +614,10 @@ function Mongoosastic(schema, pluginOpts) {
 
     if (doc) {
       if (populate && populate.length) {
-        populate.forEach(function (populateOpts) {
+        populate.forEach(populateOpts => {
           doc.populate(populateOpts);
         });
-        doc.execPopulate().then(function (popDoc) {
+        doc.execPopulate().then(popDoc => {
           popDoc.index(onIndex);
         });
       } else {
@@ -647,6 +647,7 @@ function Mongoosastic(schema, pluginOpts) {
   if (indexAutomatically) {
     setUpMiddlewareHooks(schema);
   }
+
 }
 
 module.exports = Mongoosastic;

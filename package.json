@@ -2,7 +2,7 @@
   "author": "James R. Carr <james.r.carr@gmail.com> (http://blog.james-carr.org)",
   "name": "mongoosastic",
   "description": "A mongoose plugin that indexes models into elastic search",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "tags": [
     "mongodb",
     "elasticsearch",
@@ -21,6 +21,7 @@
   "devDependencies": {
     "async": "^1.5.2",
     "babel-eslint": "^4.1.8",
+    "babel-preset-es2015": "^6.5.0",
     "changelog": "^1.0.7",
     "coveralls": "^2.11.6",
     "eslint": "^1.10.0",
